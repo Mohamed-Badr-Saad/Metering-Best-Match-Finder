@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Dead Weight Tester Calibration</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="p-4">
+    <div class="container">
+        <h2 class="mb-4">Dead Weight Tester Best Match Finder (Pneumatic)</h2>
+
+        <div class="row">
+
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Paste Weight Data (Name & Value in <b>bar</b>):</label>
+                <textarea class="form-control" id="weightInput" rows="8" placeholder="e.g.
+                P+large piston    0.01999
+                P+small piston    0.01
+                500 mass 1        0.49929
+                100 mass 5        0.09985"></textarea>
+            </div>
+
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Paste Target Values (in <b>mbar</b>):</label>
+                <textarea class="form-control" id="targetInput" rows="8" placeholder="e.g.
+                0
+                125
+                250
+                375
+                500"></textarea>
+            </div>
+        </div>
+
+        <button class="btn btn-primary mb-4" onclick="calculate()">Find Best Matches</button>
+
+        <div id="output"></div>
+    </div>
+
+    <script>
+        function parseWeights(input) {
+            return input.trim().split('\n').map(line => {
+                const [name, value] = line.trim().split(/\s{2,}|\t+/);
+                return { name, value: parseFloat(value) };
+            });
+        }
+
+        function parseTargets(input) {
+            return input.trim().split('\n').map(x => parseFloat(x));
+        }
+
+        function categorizeWeights(weights) {
+            const pistons = weights.filter(w => w.name.toLowerCase().includes('piston'));
+            const masses = weights.filter(w => !w.name.toLowerCase().includes('piston'));
+            return { pistons, masses };
+        }
+
+        function findBestPiston(pistons, masses, targets) {
+            const usageCount = pistons.map(p => ({ piston: p, count: 0, totalError: 0 }));
+
+            for (const target of targets) {
+                let best = null;
+
+                for (const { piston } of usageCount) {
+                    const result = findBestCombination(target, piston, masses);
+                    if (!best || result.error < best.error) {
+                        best = { piston, error: result.error };
+                    }
+                }
+
+                const entry = usageCount.find(p => p.piston === best.piston);
+                entry.count += 1;
+                entry.totalError += best.error;
+            }
+
+            // Sort by usage count descending, then prefer "large" piston in case of tie
+            usageCount.sort((a, b) => {
+                if (b.count !== a.count) return b.count - a.count;
+                if (a.piston.name.toLowerCase().includes("large")) return -1;
+                if (b.piston.name.toLowerCase().includes("large")) return 1;
+                return 0;
+            });
+
+            return usageCount[0].piston;
+        }
+
+
+        function findBestCombination(target_mbar, piston, masses) {
+            const target_bar = target_mbar / 1000;
+
+            let best = { actual: 0, combo: [], error: Infinity };
+
+            const n = masses.length;
+            const totalCombos = 1 << n;
+
+            for (let mask = 0; mask < totalCombos; mask++) {
+                const selectedMasses = [];
+                let sum = 0;
+
+                for (let i = 0; i < n; i++) {
+                    if (mask & (1 << i)) {
+                        selectedMasses.push(masses[i]);
+                        sum += masses[i].value;
+                    }
+                }
+
+                let total = sum;
+                const combo = [...selectedMasses];
+
+                if (target_mbar !== 0) {
+                    total += piston.value;
+                    combo.unshift(piston);
+                }
+
+                const error = Math.abs(total - target_bar);
+
+                if (error < best.error) {
+                    best = { actual: total, combo: combo, error };
+                }
+            }
+
+            return best;
+        }
+
+        function calculate() {
+            const weights = parseWeights(document.getElementById('weightInput').value);
+            const targets = parseTargets(document.getElementById('targetInput').value);
+            const { pistons, masses } = categorizeWeights(weights);
+            const preferredPiston = findBestPiston(pistons, masses, targets);
+
+            const output = document.getElementById('output');
+            output.innerHTML = '';
+
+            const table = document.createElement('table');
+            table.className = 'table table-bordered table-striped';
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>Target (mbar)</th>
+                        <th>Actual (mbar)</th>
+                        <th>Error (mbar)</th>
+                        <th>Weights Used</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            `;
+
+            for (const target of targets) {
+                const result = findBestCombination(target, preferredPiston, masses);
+                const actual_mbar = result.actual * 1000;
+                const error_mbar = Math.abs(actual_mbar - target);
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${target}</td>
+                    <td>${actual_mbar.toFixed(4)}</td>
+                    <td>${error_mbar.toFixed(4)}</td>
+                    <td>${result.combo.map(w => w.name).join(', ')}</td>
+                `;
+                table.querySelector('tbody').appendChild(row);
+            }
+
+            const pistonNote = document.createElement('div');
+            pistonNote.className = 'alert alert-info mt-3';
+            pistonNote.innerHTML = `<strong>Preferred Piston:</strong> ${preferredPiston.name}`;
+
+            output.appendChild(table);
+            output.appendChild(pistonNote);
+        }
+    </script>
+    <footer class="mt-5 text-muted small text-center">
+        <p class="mb-1">Developed by Mohamed Badr</p>
+        <div class="d-flex justify-content-center gap-3">
+            <a href="https://github.com/Mohamed-Badr-Saad" target="_blank" class="text-decoration-none">GitHub</a>
+            <a href="https://www.linkedin.com/in/mohamed-badr-95283b278/" target="_blank"
+                class="text-decoration-none">LinkedIn</a>
+        </div>
+    </footer>
+</body>
+
+</html>
