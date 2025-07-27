@@ -33,8 +33,9 @@
 
     <div class="container">
         <h2 class="mb-4">Dead Weight Tester Best Match Finder (Hydraulic)</h2>
-
+        <!-- Input section: 3 columns for hydraulic, pneumatic weights and target values -->
         <div class="row">
+            <!-- Hydraulic weights input -->
             <div class="col-md-4 mb-3">
                 <label for="hydraulicInput" class="form-label"><strong>Hydraulic Weights</strong>:</label>
                 <textarea class="form-control" id="hydraulicInput" placeholder="e.g. 
@@ -44,7 +45,7 @@ piston 2.001
 5 mass 1 4.9948
 "></textarea>
             </div>
-
+            <!-- Pneumatic weights input -->
             <div class="col-md-4 mb-3">
                 <label for="pneumaticInput" class="form-label"><strong>Pneumatic Weights</strong>:</label>
                 <textarea class="form-control" id="pneumaticInput" placeholder="e.g. 
@@ -53,7 +54,7 @@ piston 2.001
 20 mass 8 0.01991
 "></textarea>
             </div>
-
+            <!-- Target pressure values -->
             <div class="col-md-4 mb-3">
                 <label for="targetsInput" class="form-label"><strong>Target Values</strong> (bar):</label>
                 <textarea class="form-control" id="targetsInput" placeholder="e.g. 
@@ -65,8 +66,10 @@ piston 2.001
             </div>
         </div>
 
+        <!-- Button to trigger calculation -->
         <button class="btn btn-primary mb-4" onclick="calculate()">Find Best Matches</button>
 
+        <!-- Output result table -->
         <div id="output" class="table-responsive">
             <table class="table table-bordered table-striped align-middle">
                 <thead class="table-dark">
@@ -84,22 +87,35 @@ piston 2.001
     </div>
 
     <script>
+
+        /**
+         * Parses weight input (hydraulic or pneumatic).
+         * Each line should contain a label and a numeric value.
+         */
         function parseWeights(input, type) {
             return input
                 .trim()
                 .split('\n')
                 .map(line => {
                     const parts = line.trim().split(/\s+/);
-                    const value = parseFloat(parts.pop());
-                    const label = parts.join(' ');
+                    const value = parseFloat(parts.pop());// Last part is value
+                    const label = parts.join(' '); // Remaining is label
                     return { label, value, type };
                 })
-                .sort((a, b) => b.value - a.value);
+                .sort((a, b) => b.value - a.value);// Sort descending by value
         }
 
+
+        /**
+ * Finds the best combination of weights including the piston
+ * to get as close as possible to the target pressure.
+ */
         function findCombinationWithPiston(target, piston, weights) {
             let closest = { value: piston.value, combo: [piston] };
 
+            /**
+     * Recursive search to try all combinations.
+     */
             function search(current, remaining, total, used) {
                 if (Math.abs(total - target) < Math.abs(closest.value - target)) {
                     closest = { value: total, combo: [...used] };
@@ -113,18 +129,26 @@ piston 2.001
                 }
             }
 
+            // Exclude piston from recursive weights list
             const remainingWeights = weights.filter(w => w.label !== piston.label);
             search([], remainingWeights, piston.value, [piston]);
 
             return closest;
         }
 
+
+
+        /**
+ * Main function triggered by the "Find Best Matches" button.
+ */
         function calculate() {
+            // Parse inputs
             const hydraulicWeights = parseWeights(document.getElementById('hydraulicInput').value, 'hydraulic');
             const pneumaticWeights = parseWeights(document.getElementById('pneumaticInput').value, 'pneumatic');
             const allWeights = hydraulicWeights.concat(pneumaticWeights);
             const piston = hydraulicWeights.find(w => w.label.toLowerCase().includes("piston"));
 
+            // Parse targets
             const targets = document.getElementById('targetsInput').value
                 .trim()
                 .split('\n')
@@ -133,6 +157,7 @@ piston 2.001
             const outputBody = document.getElementById('outputBody');
             outputBody.innerHTML = '';
 
+            // Loop through each target value
             targets.forEach(target => {
                 let result;
                 if (target === 0) {
@@ -141,13 +166,15 @@ piston 2.001
                     result = findCombinationWithPiston(target, piston, allWeights);
                 }
 
+                // Format result for display
                 const formattedCombo = result.combo.map(w => {
                     const cls = w.type === 'hydraulic' ? 'source-hydraulic' : 'source-pneumatic';
                     return `${w.label} <span class="${cls}">(${w.type})</span>`;
                 }).join('<br>');
 
                 const error = (result.value - target).toFixed(6);
-
+                
+                // Add row to result table
                 const row = `
         <tr>
           <td>${target.toFixed(4)}</td>
@@ -161,7 +188,7 @@ piston 2.001
         }
     </script>
 
-     <footer class="mt-5 text-muted small text-center">
+    <footer class="mt-5 text-muted small text-center">
         <p class="mb-1">Developed by Mohamed Badr</p>
         <div class="d-flex justify-content-center gap-3">
             <a href="https://github.com/Mohamed-Badr-Saad" target="_blank" class="text-decoration-none">GitHub</a>
