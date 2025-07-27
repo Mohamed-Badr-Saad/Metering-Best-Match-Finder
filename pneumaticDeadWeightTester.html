@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Dead Weight Tester Calibration</title>
+    <!-- Include Bootstrap 5 for styling -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 
@@ -11,7 +12,9 @@
     <div class="container">
         <h2 class="mb-4">Dead Weight Tester Best Match Finder (Pneumatic)</h2>
 
+        <!-- Input Section -->
         <div class="row">
+            <!-- Weight input area -->
 
             <div class="col-md-6 mb-3">
                 <label class="form-label">Paste Weight Data (Name & Value in <b>bar</b>):</label>
@@ -22,6 +25,7 @@
                 100 mass 5        0.09985"></textarea>
             </div>
 
+            <!-- Target values input area -->
             <div class="col-md-6 mb-3">
                 <label class="form-label">Paste Target Values (in <b>mbar</b>):</label>
                 <textarea class="form-control" id="targetInput" rows="8" placeholder="e.g.
@@ -33,12 +37,15 @@
             </div>
         </div>
 
+        <!-- Button to trigger calculation -->
         <button class="btn btn-primary mb-4" onclick="calculate()">Find Best Matches</button>
 
+        <!-- Results will be injected here -->
         <div id="output"></div>
     </div>
 
     <script>
+        // Parses pasted weights into an array of objects { name, value }
         function parseWeights(input) {
             return input.trim().split('\n').map(line => {
                 const [name, value] = line.trim().split(/\s{2,}|\t+/);
@@ -46,29 +53,32 @@
             });
         }
 
+        // Parses the target values input into a float array
         function parseTargets(input) {
             return input.trim().split('\n').map(x => parseFloat(x));
         }
 
+        // Splits the input weights into pistons and regular masses
         function categorizeWeights(weights) {
             const pistons = weights.filter(w => w.name.toLowerCase().includes('piston'));
             const masses = weights.filter(w => !w.name.toLowerCase().includes('piston'));
             return { pistons, masses };
         }
 
+        // Determines the best piston by evaluating which one gives the least total error over all targets
         function findBestPiston(pistons, masses, targets) {
             const usageCount = pistons.map(p => ({ piston: p, count: 0, totalError: 0 }));
 
             for (const target of targets) {
                 let best = null;
-
+                // Test each piston with the current target
                 for (const { piston } of usageCount) {
                     const result = findBestCombination(target, piston, masses);
                     if (!best || result.error < best.error) {
                         best = { piston, error: result.error };
                     }
                 }
-
+                // Update the count and error for the best piston found for this target
                 const entry = usageCount.find(p => p.piston === best.piston);
                 entry.count += 1;
                 entry.totalError += best.error;
@@ -82,17 +92,18 @@
                 return 0;
             });
 
-            return usageCount[0].piston;
+            return usageCount[0].piston;// Return the most used piston
         }
 
 
+        // Tries all combinations of masses (bitmask) to find best match for target using a piston
         function findBestCombination(target_mbar, piston, masses) {
-            const target_bar = target_mbar / 1000;
+            const target_bar = target_mbar / 1000;// Convert target to bar
 
             let best = { actual: 0, combo: [], error: Infinity };
 
             const n = masses.length;
-            const totalCombos = 1 << n;
+            const totalCombos = 1 << n;// 2^n combinations
 
             for (let mask = 0; mask < totalCombos; mask++) {
                 const selectedMasses = [];
@@ -110,7 +121,7 @@
 
                 if (target_mbar !== 0) {
                     total += piston.value;
-                    combo.unshift(piston);
+                    combo.unshift(piston);// Add piston only if target isn't zero
                 }
 
                 const error = Math.abs(total - target_bar);
@@ -123,6 +134,7 @@
             return best;
         }
 
+        // Main function called on button click
         function calculate() {
             const weights = parseWeights(document.getElementById('weightInput').value);
             const targets = parseTargets(document.getElementById('targetInput').value);
@@ -132,6 +144,7 @@
             const output = document.getElementById('output');
             output.innerHTML = '';
 
+            // Create results table
             const table = document.createElement('table');
             table.className = 'table table-bordered table-striped';
             table.innerHTML = `
@@ -150,7 +163,7 @@
                 const result = findBestCombination(target, preferredPiston, masses);
                 const actual_mbar = result.actual * 1000;
                 const error_mbar = Math.abs(actual_mbar - target);
-
+                // Add row to table
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${target}</td>
@@ -160,7 +173,8 @@
                 `;
                 table.querySelector('tbody').appendChild(row);
             }
-
+            
+            // Display the chosen piston
             const pistonNote = document.createElement('div');
             pistonNote.className = 'alert alert-info mt-3';
             pistonNote.innerHTML = `<strong>Preferred Piston:</strong> ${preferredPiston.name}`;
