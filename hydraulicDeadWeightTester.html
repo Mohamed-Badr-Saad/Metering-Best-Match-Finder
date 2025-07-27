@@ -126,6 +126,9 @@ piston 2.001
                         search(current.concat(remaining[i]), remaining.slice(i + 1), total + remaining[i].value, used);
                         used.pop();
                     }
+                    // else {
+                    //     // STOP: Don't recurse further - this branch would exceed target
+                    // }
                 }
             }
 
@@ -173,7 +176,7 @@ piston 2.001
                 }).join('<br>');
 
                 const error = (result.value - target).toFixed(6);
-                
+
                 // Add row to result table
                 const row = `
         <tr>
