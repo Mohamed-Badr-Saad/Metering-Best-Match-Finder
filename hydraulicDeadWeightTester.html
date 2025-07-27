@@ -121,6 +121,8 @@ piston 2.001
                     closest = { value: total, combo: [...used] };
                 }
                 for (let i = 0; i < remaining.length; i++) {
+                    // When remaining.length becomes 0, the loop doesn't execute
+                    // Recursion naturally stops - no more weights to try
                     if (total + remaining[i].value <= target + 0.01) {
                         used.push(remaining[i]);
                         search(current.concat(remaining[i]), remaining.slice(i + 1), total + remaining[i].value, used);

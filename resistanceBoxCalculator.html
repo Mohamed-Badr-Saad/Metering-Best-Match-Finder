@@ -83,7 +83,7 @@
 
                 /* Recursively build all combinations of one item from each active group*/
                 const recurse = (idx, sum, virtuals, actuals) => {
-                    /* Base case: we have selected one item from each group*/
+                    // BASE CASE: We've selected one item from each active group
                     if (idx === activeGroups.length) {
                         const error = Math.abs(sum - target);
                         // Update the best combination if this one is closer
