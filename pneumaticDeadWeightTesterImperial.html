@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Resistance Box Calibration</title>
+    <title>DWT Pneumatic Combination Finder</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
@@ -58,8 +58,8 @@
             font-size: 1.2rem;
         }
 
-        .calibration-icon {
-            color: #fd7e14;
+        .pneumatic-icon {
+            color: #198754;
         }
 
         .target-icon {
@@ -135,6 +135,20 @@
             vertical-align: middle;
         }
 
+        .piston-alert {
+            background: linear-gradient(135deg, #e0e7ff 0%, #f3e8ff 100%);
+            border: 2px solid #667eea;
+            border-radius: 15px;
+            padding: 1.25rem;
+            margin-top: 1.5rem;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.1);
+        }
+
+        .piston-alert strong {
+            color: #667eea;
+            font-size: 1.1rem;
+        }
+
         footer {
             background: white;
             border-radius: 15px;
@@ -171,49 +185,42 @@
         <div class="main-container">
             <h1 class="page-title">
                 <i class="bi bi-calculator-fill"></i>
-                Resistance Box Best Match Finder
+                Dead Weight Tester Best Match Finder (Pneumatic - Imperial)
             </h1>
 
-            <!-- Input Section for Calibration and Target Values -->
+            <!-- Input section: 2 columns for weights and target values -->
             <div class="row g-4 mb-4">
+                <!-- Weight input area -->
                 <div class="col-md-6">
                     <div class="input-card">
-                        <label for="calibrationInput" class="form-label">
-                            <i class="bi bi-lightning-charge-fill calibration-icon"></i>
-                            <strong>Paste Calibration Data (Ω)</strong>
+                        <label for="weightInput" class="form-label">
+                            <i class="bi bi-wind pneumatic-icon"></i>
+                            <strong>Paste Weight Data (inH2O)</strong>
                         </label>
-                        <textarea class="form-control" id="calibrationInput" placeholder="Example (Virtual & Actual - tab separated):
-100    100.0774
-90     90.2707
-80     80.4845
-70     70.5896"></textarea>
+                        <textarea class="form-control" id="weightInput" placeholder="Mass_Name    Equivalent_Pressure"></textarea>
                     </div>
                 </div>
 
+                <!-- Target values input area -->
                 <div class="col-md-6">
                     <div class="input-card">
                         <label for="targetInput" class="form-label">
                             <i class="bi bi-bullseye target-icon"></i>
-                            <strong>Paste Target Actual Ohm Values</strong>
+                            <strong>Paste Target Values (inH2O)</strong>
                         </label>
-                        <textarea class="form-control" id="targetInput" placeholder="Example (one per line):
-100
-104.8764
-109.73
-114.5749
-"></textarea>
+                        <textarea class="form-control" id="targetInput" placeholder="Targets_Pressure"></textarea>
                     </div>
                 </div>
             </div>
 
-            <!-- Button to start the calculation -->
+            <!-- Button to trigger calculation -->
             <div class="text-center mb-4">
                 <button class="btn btn-primary btn-calculate" onclick="calculate()">
                     <i class="bi bi-search"></i> Find Best Matches
                 </button>
             </div>
 
-            <!-- Output div -->
+            <!-- Results will be injected here -->
             <div id="output"></div>
         </div>
 
@@ -234,87 +241,101 @@
     </div>
 
     <script>
-        /* Parses the calibration input text into an array of objects with virtual and actual values*/
-        function parseCalibration(input) {
+        // Parses pasted weights into an array of objects { name, value }
+        function parseWeights(input) {
             return input.trim().split('\n').map(line => {
-                const [virtual, actual] = line.trim().split(/\s+/).map(Number);
-                return { virtual, actual };
+                const [name, value] = line.trim().split(/\s{2,}|\t+/);
+                return { name, value: parseFloat(value) };
             });
         }
 
-        /* Groups the parsed calibration data into 5 predefined ranges (G1 to G5)*/
-        function groupByRanges(data) {
-            return {
-                G1: data.filter(d => d.virtual >= 0 && d.virtual <= 0.09),
-                G2: data.filter(d => d.virtual >= 0.1 && d.virtual <= 0.9),
-                G3: data.filter(d => d.virtual >= 1 && d.virtual <= 9),
-                G4: data.filter(d => d.virtual >= 10 && d.virtual <= 90 && d.virtual % 10 === 0),
-                G5: data.filter(d => d.virtual >= 100 && d.virtual <= 900 && d.virtual % 100 === 0)
-            };
+        // Parses the target values input into a float array
+        function parseTargets(input) {
+            return input.trim().split('\n').map(x => parseFloat(x));
         }
 
-        /* Finds the best combination of values from the groups to match a target actual resistance*/
-        function findBestCombo(groups, target) {
-            let best = null;
-            let minError = Infinity;
+        // Splits the input weights into pistons and regular masses
+        function categorizeWeights(weights) {
+            const pistons = weights.filter(w => w.name.toLowerCase().includes('piston'));
+            const masses = weights.filter(w => !w.name.toLowerCase().includes('piston'));
+            return { pistons, masses };
+        }
 
-            // Extract group arrays
-            const G1 = groups.G1, G2 = groups.G2, G3 = groups.G3, G4 = groups.G4, G5 = groups.G5;
-            const groupLists = [G1, G2, G3, G4, G5];
+        // Determines the best piston by evaluating which one gives the least total error over all targets
+        function findBestPiston(pistons, masses, targets) {
+            const usageCount = pistons.map(p => ({ piston: p, count: 0, totalError: 0 }));
 
-            // Use bitmasks to try all combinations of 1-5 groups (Try every non-empty combination of groups using bitmasking (from 00001 to 11111))
-            for (let mask = 1; mask < (1 << 5); mask++) {
-                const activeGroups = [];
-                /* Include only groups where the corresponding bit is set*/
-                for (let i = 0; i < 5; i++) {
+            for (const target of targets) {
+                let best = null;
+                // Test each piston with the current target
+                for (const { piston } of usageCount) {
+                    const result = findBestCombination(target, piston, masses);
+                    if (!best || result.error < best.error) {
+                        best = { piston, error: result.error };
+                    }
+                }
+                // Update the count and error for the best piston found for this target
+                const entry = usageCount.find(p => p.piston === best.piston);
+                entry.count += 1;
+                entry.totalError += best.error;
+            }
+
+            // Sort by usage count descending, then prefer "large" piston in case of tie
+            usageCount.sort((a, b) => {
+                if (b.count !== a.count) return b.count - a.count;
+                if (a.piston.name.toLowerCase().includes("large")) return -1;
+                if (b.piston.name.toLowerCase().includes("large")) return 1;
+                return 0;
+            });
+
+            return usageCount[0].piston;// Return the most used piston
+        }
+
+        // Tries all combinations of masses (bitmask) to find best match for target using a piston
+        function findBestCombination(target, piston, masses) {
+            let best = { actual: 0, combo: [], error: Infinity };
+
+            const n = masses.length;
+            const totalCombos = 1 << n;// 2^n combinations
+
+            for (let mask = 0; mask < totalCombos; mask++) {
+                const selectedMasses = [];
+                let sum = 0;
+
+                for (let i = 0; i < n; i++) {
                     if (mask & (1 << i)) {
-                        activeGroups.push(groupLists[i]);
+                        selectedMasses.push(masses[i]);
+                        sum += masses[i].value;
                     }
                 }
 
-                /* Recursively build all combinations of one item from each active group*/
-                const recurse = (idx, sum, virtuals, actuals) => {
-                    // BASE CASE: We've selected one item from each active group
-                    if (idx === activeGroups.length) {
-                        const error = Math.abs(sum - target);
-                        // Update the best combination if this one is closer
-                        if (error < minError) {
-                            minError = error;
-                            best = {
-                                actualSum: sum,
-                                virtuals,
-                                error
-                            };
-                        }
-                        return;
-                    }
+                let total = sum;
+                const combo = [...selectedMasses];
 
-                    // Try each item in the current group
-                    for (const item of activeGroups[idx]) {
-                        recurse(idx + 1,  // move to next group
-                            sum + item.actual, // add actual resistance
-                            [...virtuals, item.virtual],// add to virtual list
-                            actuals);
-                    }
-                };
+                if (target !== 0) {
+                    total += piston.value;
+                    combo.unshift(piston);// Add piston only if target isn't zero
+                }
 
-                recurse(0, 0, [], []);
+                const error = Math.abs(total - target);
+
+                if (error < best.error) {
+                    best = { actual: total, combo: combo, error };
+                }
             }
 
             return best;
         }
 
-        // Main function triggered by button click
+        // Main function called on button click
         function calculate() {
-            const calibrationText = document.getElementById('calibrationInput').value;
-            const targetText = document.getElementById('targetInput').value;
+            const weights = parseWeights(document.getElementById('weightInput').value);
+            const targets = parseTargets(document.getElementById('targetInput').value);
+            const { pistons, masses } = categorizeWeights(weights);
+            const preferredPiston = findBestPiston(pistons, masses, targets);
 
-            // Parse inputs
-            const calibrationData = parseCalibration(calibrationText);
-            const targets = targetText.trim().split('\n').map(Number);
-            const groups = groupByRanges(calibrationData);
             const output = document.getElementById('output');
-            output.innerHTML = '';// Clear previous output
+            output.innerHTML = '';
 
             // Create output section wrapper
             const outputSection = document.createElement('div');
@@ -329,30 +350,42 @@
             table.innerHTML = `
                 <thead>
                     <tr>
-                        <th scope="col"><i class="bi bi-bullseye"></i> Target Actual Ohm</th>
-                        <th scope="col"><i class="bi bi-check-circle"></i> Best Actual Sum</th>
-                        <th scope="col"><i class="bi bi-list-ul"></i> Virtual Ohms Used</th>
-                        <th scope="col"><i class="bi bi-exclamation-triangle"></i> Error</th>
+                        <th scope="col"><i class="bi bi-bullseye"></i> Target (inH2O)</th>
+                        <th scope="col"><i class="bi bi-check-circle"></i> Actual (inH2O)</th>
+                        <th scope="col"><i class="bi bi-exclamation-triangle"></i> Error (inH2O)</th>
+                        <th scope="col"><i class="bi bi-list-ul"></i> Weights Used</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
             `;
 
-            // For each target value, compute the best match
             for (const target of targets) {
-                const best = findBestCombo(groups, target);
+                const result = findBestCombination(target, preferredPiston, masses);
+                const actual_inH2O = result.actual;
+                const error_inH2O = Math.abs(actual_inH2O - target);
+                // Add row to table
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${target}</td>
-                    <td>${best.actualSum.toFixed(6)}</td>
-                    <td>${best.virtuals.join(' + ')}</td>
-                    <td>${best.error.toFixed(6)}</td>
+                    <td>${actual_inH2O.toFixed(4)}</td>
+                    <td>${error_inH2O.toFixed(4)}</td>
+                    <td>${result.combo.map(w => w.name).join(', ')}</td>
                 `;
                 table.querySelector('tbody').appendChild(row);
             }
 
             tableWrapper.appendChild(table);
             outputSection.appendChild(tableWrapper);
+
+            // Display the chosen piston with enhanced styling
+            const pistonNote = document.createElement('div');
+            pistonNote.className = 'piston-alert';
+            pistonNote.innerHTML = `
+                <i class="bi bi-info-circle-fill" style="color: #667eea; font-size: 1.2rem;"></i>
+                <strong>Preferred Piston:</strong> ${preferredPiston.name}
+            `;
+
+            outputSection.appendChild(pistonNote);
             output.appendChild(outputSection);
         }
     </script>
