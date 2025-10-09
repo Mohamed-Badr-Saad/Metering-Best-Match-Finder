@@ -14,6 +14,68 @@
             padding: 2rem 0;
         }
 
+        /* Unit Toggle Switch Styling */
+        .unit-selector-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .unit-selector {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 15px;
+            padding: 1.2rem;
+            margin-bottom: 1.1rem;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            width: fit-content;
+        }
+
+        .unit-selector label {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 1rem;
+            display: block;
+            font-size: 1.1rem;
+        }
+
+        .unit-toggle {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+            background: white;
+            border-radius: 50px;
+            padding: 0.1rem;
+
+
+        }
+
+        .unit-option {
+            padding: 0.6rem 1rem;
+            border-radius: 50px;
+            font-weight: 400;
+            font-size: 15px;
+            cursor: pointer;
+            width: fit-content;
+            height: fit-content;
+            border: 1px solid #198754;
+            transition: all 0.3s ease;
+            color: #198754;
+        }
+
+        .unit-option.active {
+            background: linear-gradient(135deg, #198754 0%, #1a6920 100%);
+            color: white;
+            box-shadow: 0 3px 10px rgba(102, 126, 234, 0.3);
+        }
+
+        .unit-option:hover:not(.active) {
+            background: #f0f3ff;
+        }
+
         .main-container {
             background: white;
             border-radius: 20px;
@@ -195,9 +257,24 @@
                     <div class="input-card">
                         <label for="weightInput" class="form-label">
                             <i class="bi bi-wind pneumatic-icon"></i>
-                            <strong>Paste Weight Data (inH2O)</strong>
+                            <strong>Paste Weight Data (<span id="pneumaticUnit">PSI</span>)</strong>
                         </label>
-                        <textarea class="form-control" id="weightInput" placeholder="Mass_Name    Equivalent_Pressure"></textarea>
+                        <!-- Unit System Selector -->
+                        <div class="unit-selector-container">
+                            <div class="unit-selector">
+                                <div style="font-weight: 500; font-size: 19px;">Select Unit</div>
+                                <div class="unit-toggle">
+                                    <div class="unit-option active" onclick="setPneumaticPumpUnit('PSI')">
+                                        PSI
+                                    </div>
+                                    <div class="unit-option" onclick="setPneumaticPumpUnit('inH2O')">
+                                        inH2O
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <textarea class="form-control" id="weightInput"
+                            placeholder="Mass_Name    Equivalent_Pressure"></textarea>
                     </div>
                 </div>
 
@@ -241,6 +318,27 @@
     </div>
 
     <script>
+
+        // Default Measuring unit is inH2O
+        let pneumaticMeasuringUnit = 'PSI';
+
+        // Function to switch between inH2O and PSI units
+        function setPneumaticPumpUnit(system) {
+            pneumaticMeasuringUnit = system;
+
+            // Update active state on toggle buttons
+            document.querySelectorAll('.unit-option').forEach(option => {
+                option.classList.remove('active');
+            });
+            event.target.closest('.unit-option').classList.add('active');
+
+            // Update all tool card links based on selected unit system
+            const suffix = system === 'inH2O' ? 'inH2O' : 'PSI';
+
+            document.getElementById('pneumaticUnit').textContent = `${suffix}`;
+
+        }
+
         // Parses pasted weights into an array of objects { name, value }
         function parseWeights(input) {
             return input.trim().split('\n').map(line => {
@@ -329,7 +427,18 @@
 
         // Main function called on button click
         function calculate() {
+
+            // Conversion constant
+            const PSI_TO_INH2O = 27.679904842545;
             const weights = parseWeights(document.getElementById('weightInput').value);
+            console.log(pneumaticMeasuringUnit);
+            if (pneumaticMeasuringUnit === 'PSI') {
+                weights.forEach(w => {
+                    // Convert weights from PSI to inH2O
+                    w.value = PSI_TO_INH2O * w.value
+                });
+            }
+            console.log(weights);
             const targets = parseTargets(document.getElementById('targetInput').value);
             const { pistons, masses } = categorizeWeights(weights);
             const preferredPiston = findBestPiston(pistons, masses, targets);
