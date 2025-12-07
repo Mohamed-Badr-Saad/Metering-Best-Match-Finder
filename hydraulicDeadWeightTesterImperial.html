@@ -434,7 +434,9 @@
          */
         function calculate() {
             // Conversion constant
-            const INH2O_TO_PSI = 0.03612729182735355;
+           // const INH2O_TO_PSI = 0.03612729182735355; //old conversion factor
+            
+            const INH2O_TO_PSI =0.03609119219;
 
             // Parse inputs
             const hydraulicWeights = parseWeights(document.getElementById('hydraulicInput').value, 'hydraulic');
