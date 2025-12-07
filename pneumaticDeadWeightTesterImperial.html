@@ -429,7 +429,8 @@
         function calculate() {
 
             // Conversion constant
-            const PSI_TO_INH2O = 27.679904842545;
+          //  const PSI_TO_INH2O = 27.679904842545; //old conversion factor
+           const PSI_TO_INH2O = 27.7075912237766104;
             const weights = parseWeights(document.getElementById('weightInput').value);
             console.log(pneumaticMeasuringUnit);
             if (pneumaticMeasuringUnit === 'PSI') {
